@@ -261,29 +261,39 @@
 
 
 
-
-
-
-// lib/src/widgets/banner_ad_widget.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../ad_platform_sdk.dart';
 import '../models/ad_request.dart';
 import '../models/ad_response.dart';
 import '../models/ad_unit.dart';
-import '../../ad_platform_sdk.dart';
 
 class BannerAdWidget extends StatefulWidget {
+  /// Required: Unique placement ID
   final String placementId;
+
+  /// Ad size (width x height)
   final AdSize size;
+
+  /// Ad targeting parameters
   final Map<String, dynamic> targeting;
+
+  /// Optional callbacks
   final VoidCallback? onAdLoaded;
   final ValueChanged<String>? onAdFailed;
   final VoidCallback? onAdClicked;
+
+  /// UI customization (all optional)
   final Widget? loadingWidget;
   final Widget? errorWidget;
-  final Duration? refreshInterval;
+  final Duration refreshInterval;
+  final Color borderColor;
+  final double borderRadius;
+  final List<BoxShadow> boxShadow;
+  final Color labelBackgroundColor;
+  final TextStyle labelTextStyle;
 
   const BannerAdWidget({
     Key? key,
@@ -295,7 +305,14 @@ class BannerAdWidget extends StatefulWidget {
     this.onAdClicked,
     this.loadingWidget,
     this.errorWidget,
-    this.refreshInterval,
+    this.refreshInterval = const Duration(seconds: 60),
+    this.borderColor = Colors.grey,
+    this.borderRadius = 8.0,
+    this.boxShadow = const [
+      BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+    ],
+    this.labelBackgroundColor = Colors.black54,
+    this.labelTextStyle = const TextStyle(color: Colors.white, fontSize: 8),
   }) : super(key: key);
 
   @override
@@ -307,44 +324,35 @@ class _BannerAdWidgetState extends State<BannerAdWidget>
   AdResponse? _adResponse;
   bool _isLoading = true;
   String? _errorMessage;
-  bool _disposed = false;
   Timer? _refreshTimer;
-
-  @override
-  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _loadAd();
-    _setupRefreshTimer();
+    _scheduleRefresh();
   }
 
   @override
   void dispose() {
-    _disposed = true;
     _refreshTimer?.cancel();
     super.dispose();
   }
 
-  void _setupRefreshTimer() {
-    if (widget.refreshInterval != null) {
-      _refreshTimer = Timer.periodic(widget.refreshInterval!, (_) {
-        if (!_disposed && mounted) {
-          _loadAd();
-        }
-      });
-    }
+  @override
+  bool get wantKeepAlive => true;
+
+  void _scheduleRefresh() {
+    _refreshTimer = Timer.periodic(widget.refreshInterval, (_) {
+      if (mounted) _loadAd();
+    });
   }
 
   Future<void> _loadAd() async {
-    if (_disposed) return;
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-
     try {
       final request = AdRequest(
         placementId: widget.placementId,
@@ -352,56 +360,36 @@ class _BannerAdWidgetState extends State<BannerAdWidget>
         adFormat: AdFormat.banner,
         targeting: widget.targeting,
       );
-
       final response = await AdPlatformSDK.instance.loadBannerAd(request);
 
-      if (_disposed) return;
-
+      if (!mounted) return;
       if (response != null && response.success && response.ad != null) {
         setState(() {
           _adResponse = response;
           _isLoading = false;
         });
-
-        _trackImpression();
+        AdPlatformSDK.instance.trackImpression(response.ad!.id, AdFormat.banner);
         widget.onAdLoaded?.call();
       } else {
-        final errorMessage = response?.message ?? 'Failed to load ad';
-        setState(() {
-          _errorMessage = errorMessage;
-          _isLoading = false;
-        });
-        widget.onAdFailed?.call(errorMessage);
+        throw Exception(response?.message ?? 'No ad available');
       }
     } catch (e) {
-      if (_disposed) return;
-
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
         _isLoading = false;
+        _errorMessage = e.toString();
       });
       widget.onAdFailed?.call(e.toString());
     }
   }
 
-  void _trackImpression() {
-    if (_adResponse?.ad != null) {
-      AdPlatformSDK.instance.trackImpression(_adResponse!.ad!.id, AdFormat.banner);
-    }
-  }
-
-  void _handleClick() async {
-    if (_adResponse?.ad?.clickUrl != null) {
+  Future<void> _handleClick() async {
+    final url = _adResponse?.ad?.clickUrl;
+    if (url != null) {
       AdPlatformSDK.instance.trackClick(_adResponse!.ad!.id, AdFormat.banner);
       widget.onAdClicked?.call();
-
-      try {
-        final url = Uri.parse(_adResponse!.ad!.clickUrl!);
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        }
-      } catch (e) {
-        debugPrint('Failed to launch URL: $e');
+      if (await canLaunchUrl(Uri.parse(url))) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     }
   }
@@ -409,134 +397,74 @@ class _BannerAdWidgetState extends State<BannerAdWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return SizedBox(
       width: widget.size.width.toDouble(),
       height: widget.size.height.toDouble(),
-      child: _buildContent(),
+      child: _isLoading
+          ? widget.loadingWidget ?? _buildDefaultLoading()
+          : (_errorMessage != null
+              ? widget.errorWidget ?? _buildDefaultError()
+              : _buildAdContent()),
     );
   }
 
-  Widget _buildContent() {
-    if (_isLoading) {
-      return widget.loadingWidget ?? _buildLoadingWidget();
-    }
-
-    if (_errorMessage != null) {
-      return widget.errorWidget ?? _buildErrorWidget();
-    }
-
-    if (_adResponse?.ad != null) {
-      return _buildAdWidget();
-    }
-
-    return _buildErrorWidget();
-  }
-
-  Widget _buildLoadingWidget() {
+  Widget _buildDefaultLoading() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey!),
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        border: Border.all(color: widget.borderColor),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildDefaultError() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        border: Border.all(color: widget.borderColor),
       ),
       child: const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: Text('Ad Unavailable', style: TextStyle(color: Colors.grey)),
       ),
     );
   }
 
-  Widget _buildErrorWidget() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.grey!,
-         style: BorderStyle.solid,
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.image_not_supported_outlined,
-                color: Colors.grey, size: 16),
-            const SizedBox(height: 4),
-            Text(
-              'Ad Unavailable',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdWidget() {
+  Widget _buildAdContent() {
     final ad = _adResponse!.ad!;
-
     return GestureDetector(
       onTap: _handleClick,
       child: Container(
+        clipBehavior: Clip.hardEdge,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          boxShadow: widget.boxShadow,
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            children: [
-              CachedNetworkImage(
-                imageUrl: ad.creativeUrl,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => _buildLoadingWidget(),
-                errorWidget: (context, url, error) => _buildErrorWidget(),
-                memCacheWidth: widget.size.width,
-                memCacheHeight: widget.size.height,
-              ),
-              
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: const Text(
-                    'Ad',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        child: Stack(children: [
+          CachedNetworkImage(
+            imageUrl: ad.creativeUrl,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => _buildDefaultLoading(),
+            errorWidget: (_, __, ___) => _buildDefaultError(),
           ),
-        ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: widget.labelBackgroundColor,
+                // borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('Ad', style: widget.labelTextStyle),
+            ),
+          ),
+        ]),
       ),
     );
   }
 }
-
-

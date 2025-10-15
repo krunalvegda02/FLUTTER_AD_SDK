@@ -11,7 +11,7 @@ class RewardedAdWidget extends StatelessWidget {
   final void Function(String type, int amount)? onRewardEarned;
 
   const RewardedAdWidget({
-    Key? key,
+    super.key,
     required this.placementId,
     this.targeting,
     this.onAdLoaded,
@@ -19,7 +19,7 @@ class RewardedAdWidget extends StatelessWidget {
     this.onAdClicked,
     this.onAdClosed,
     this.onRewardEarned,
-  }) : super(key: key);
+  });
 
   static Future<bool> show({
     required BuildContext context,
@@ -70,7 +70,6 @@ class _RewardedAdFullScreen extends StatefulWidget {
   final String rewardType;
 
   const _RewardedAdFullScreen({
-    Key? key,
     required this.placementId,
     required this.adDurationSeconds,
     this.onAdLoaded,
@@ -79,7 +78,7 @@ class _RewardedAdFullScreen extends StatefulWidget {
     this.onRewardEarned,
     this.rewardAmount = 50,
     this.rewardType = "coins",
-  }) : super(key: key);
+  });
 
   @override
   State<_RewardedAdFullScreen> createState() => _RewardedAdFullScreenState();
@@ -144,8 +143,8 @@ class _RewardedAdFullScreenState extends State<_RewardedAdFullScreen> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.check_circle, color: Colors.green, size: 28),
             SizedBox(width: 8),
             Text('Reward Earned!'),

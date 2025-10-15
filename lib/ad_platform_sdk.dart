@@ -2,7 +2,6 @@
 library ad_platform_sdk;
 
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -53,7 +52,7 @@ class AdPlatformSDK {
     try {
       // Validate required parameters
       if (publisherId.isEmpty || apiKey.isEmpty) {
-        throw SDKException('Publisher ID and API Key are required');
+        throw const SDKException('Publisher ID and API Key are required');
       }
 
       // Create configuration
@@ -79,7 +78,7 @@ class AdPlatformSDK {
       // Validate SDK with server
       final validationResult = await _validateSDK();
       if (!validationResult) {
-        throw SDKException('SDK validation failed');
+        throw const SDKException('SDK validation failed');
       }
 
       // Initialize cache
@@ -263,7 +262,7 @@ class AdPlatformSDK {
   /// Ensure SDK is initialized
   void _ensureInitialized() {
     if (!_isInitialized) {
-      throw SDKException('SDK not initialized. Call AdPlatformSDK.instance.initialize() first.');
+      throw const SDKException('SDK not initialized. Call AdPlatformSDK.instance.initialize() first.');
     }
   }
 

@@ -266,9 +266,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../ad_platform_sdk.dart';
-import '../models/ad_request.dart';
-import '../models/ad_response.dart';
-import '../models/ad_unit.dart';
 
 class BannerAdWidget extends StatefulWidget {
   /// Required: Unique placement ID
@@ -296,7 +293,7 @@ class BannerAdWidget extends StatefulWidget {
   final TextStyle labelTextStyle;
 
   const BannerAdWidget({
-    Key? key,
+    super.key,
     required this.placementId,
     required this.size,
     this.targeting = const {},
@@ -313,7 +310,7 @@ class BannerAdWidget extends StatefulWidget {
     ],
     this.labelBackgroundColor = Colors.black54,
     this.labelTextStyle = const TextStyle(color: Colors.white, fontSize: 8),
-  }) : super(key: key);
+  });
 
   @override
   State<BannerAdWidget> createState() => _BannerAdWidgetState();

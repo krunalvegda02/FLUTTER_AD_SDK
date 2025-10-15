@@ -66,7 +66,6 @@ class _InterstitialFullScreen extends StatelessWidget {
   final VoidCallback? onAdClosed;
 
   const _InterstitialFullScreen({
-    Key? key,
     required this.titleText,
     required this.bodyText,
     required this.clickButtonText,
@@ -75,7 +74,7 @@ class _InterstitialFullScreen extends StatelessWidget {
     required this.fallbackImageUrl,
     this.onAdClicked,
     this.onAdClosed,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

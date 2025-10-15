@@ -2,7 +2,7 @@ name: ad_platform_sdk
 description: Flutter SDK for Advertisement Platform - Monetize your app with banner, interstitial, and rewarded ads
 version: 1.0.0
 homepage: https://github.com/yourcompany/flutter-ad-platform-sdk
-
+repository: "https://github.com/krunalvegda02/FLUTTER_AD_SDK"
 environment:
   sdk: '>=3.0.0 <4.0.0'
   flutter: ">=3.10.0"
@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  plugin_platform_interface: ^2.1.5
   http: ^1.1.0
   device_info_plus: ^9.1.0
   package_info_plus: ^4.2.0

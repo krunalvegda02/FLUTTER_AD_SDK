@@ -11,13 +11,13 @@ class SDKException implements Exception {
 }
 
 class NetworkException extends SDKException {
-  const NetworkException(String message) : super(message, code: 'NETWORK_ERROR');
+  const NetworkException(super.message) : super(code: 'NETWORK_ERROR');
 }
 
 class ValidationException extends SDKException {
-  const ValidationException(String message) : super(message, code: 'VALIDATION_ERROR');
+  const ValidationException(super.message) : super(code: 'VALIDATION_ERROR');
 }
 
 class CacheException extends SDKException {
-  const CacheException(String message) : super(message, code: 'CACHE_ERROR');
+  const CacheException(super.message) : super(code: 'CACHE_ERROR');
 }

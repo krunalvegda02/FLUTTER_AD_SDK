@@ -141,13 +141,11 @@
 
 
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/sdk_config.dart';
 import '../models/ad_request.dart';
 import '../models/ad_response.dart';
 import '../models/ad_unit.dart';
-import '../exceptions/sdk_exception.dart';
 
 class ApiService {
   final SDKConfig _config;

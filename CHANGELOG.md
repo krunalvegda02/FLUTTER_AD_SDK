@@ -1,3 +1,5 @@
-## 0.0.1
+## 1.0.1
 
-* TODO: Describe initial release.
+- Initial release of Ad Platform SDK.
+- Added banner, interstitial, and rewarded ad support.
+- Added caching and performance optimizations.

@@ -1,5 +1,3 @@
-// ios/Classes/AdPlatformSdkPlugin.swift
-
 import Flutter
 import UIKit
 
@@ -25,21 +23,26 @@ public class AdPlatformSdkPlugin: NSObject, FlutterPlugin {
         adRequestManager.loadInterstitialAd(placementId: adId) { success in
           result(success)
         }
+        
       case "showInterstitial":
         guard let args = call.arguments as? [String: Any], let adId = args["adId"] as? String else {
           result(FlutterError(code: "INVALID_ARGUMENT", message: "Ad ID required", details: nil))
           return
         }
         if adRequestManager.isInterstitialAdLoaded(placementId: adId) {
-          let shown = adViewController.showInterstitialAd(placementId: adId) {
-            self.channel.invokeMethod("onAdClicked", arguments: nil)
-          } onClosed: {
-            self.channel.invokeMethod("onAdClosed", arguments: nil)
-          }
+          let shown = adViewController.showInterstitialAd(
+            placementId: adId,
+            onClicked: {
+              self.channel.invokeMethod("onAdClicked", arguments: nil)
+            },
+            onClosed: {
+              self.channel.invokeMethod("onAdClosed", arguments: nil)
+            })
           result(shown)
         } else {
           result(FlutterError(code: "NOT_LOADED", message: "Interstitial not loaded", details: nil))
         }
+        
       case "loadRewarded":
         guard let args = call.arguments as? [String: Any], let adId = args["adId"] as? String else {
           result(FlutterError(code: "INVALID_ARGUMENT", message: "Ad ID required", details: nil))
@@ -48,13 +51,15 @@ public class AdPlatformSdkPlugin: NSObject, FlutterPlugin {
         adRequestManager.loadRewardedAd(placementId: adId) { success in
           result(success)
         }
+        
       case "showRewarded":
         guard let args = call.arguments as? [String: Any], let adId = args["adId"] as? String else {
           result(FlutterError(code: "INVALID_ARGUMENT", message: "Ad ID required", details: nil))
           return
         }
         if adRequestManager.isRewardedAdLoaded(placementId: adId) {
-          let shown = adViewController.showRewardedAd(placementId: adId,
+          let shown = adViewController.showRewardedAd(
+            placementId: adId,
             onReward: { type, amount in
               self.channel.invokeMethod("onRewardEarned", arguments: ["type": type, "amount": amount])
             },
@@ -63,12 +68,12 @@ public class AdPlatformSdkPlugin: NSObject, FlutterPlugin {
             },
             onClosed: {
               self.channel.invokeMethod("onAdClosed", arguments: nil)
-            }
-          )
+            })
           result(shown)
         } else {
           result(FlutterError(code: "NOT_LOADED", message: "Rewarded not loaded", details: nil))
         }
+        
       default:
         result(FlutterMethodNotImplemented)
     }

@@ -275,6 +275,24 @@ class AdPlatformSDK {
   /// Get current configuration
   SDKConfig? get config => _isInitialized ? _config : null;
 
+  /// Get cache service instance
+  CacheService get cacheService {
+    _ensureInitialized();
+    return _cacheService;
+  }
+
+  /// Get API service instance
+  ApiService get apiService {
+    _ensureInitialized();
+    return _apiService;
+  }
+
+  /// Get tracking service instance
+  TrackingService get trackingService {
+    _ensureInitialized();
+    return _trackingService;
+  }
+
   /// Dispose SDK resources
   Future<void> dispose() async {
     if (!_isInitialized) return;

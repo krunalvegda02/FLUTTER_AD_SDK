@@ -257,15 +257,14 @@
 //   }
 // }
 
-
-
-
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../ad_platform_sdk.dart';
+import '../services/api_service.dart';
+import '../services/cache_service.dart';
+import '../services/tracking_service.dart';
 
 class BannerAdWidget extends StatefulWidget {
   /// Required: Unique placement ID
@@ -292,6 +291,11 @@ class BannerAdWidget extends StatefulWidget {
   final Color labelBackgroundColor;
   final TextStyle labelTextStyle;
 
+  /// Service dependencies (optional - will use SDK instance if not provided)
+  final ApiService? apiService;
+  final CacheService? cacheService;
+  final TrackingService? trackingService;
+
   const BannerAdWidget({
     super.key,
     required this.placementId,
@@ -310,6 +314,9 @@ class BannerAdWidget extends StatefulWidget {
     ],
     this.labelBackgroundColor = Colors.black54,
     this.labelTextStyle = const TextStyle(color: Colors.white, fontSize: 8),
+    this.apiService,
+    this.cacheService,
+    this.trackingService,
   });
 
   @override
@@ -322,12 +329,25 @@ class _BannerAdWidgetState extends State<BannerAdWidget>
   bool _isLoading = true;
   String? _errorMessage;
   Timer? _refreshTimer;
+  
+  // Service instances
+  late final ApiService _apiService;
+  late final CacheService _cacheService;
+  late final TrackingService _trackingService;
+  
+  // Track impression state
+  bool _impressionTracked = false;
 
   @override
   void initState() {
     super.initState();
-    _loadAd();
-    _scheduleRefresh();
+    _initializeServices();
+    
+    // Only load ad and schedule refresh if SDK is initialized
+    if (AdPlatformSDK.instance.isInitialized) {
+      _loadAd();
+      _scheduleRefresh();
+    }
   }
 
   @override
@@ -339,55 +359,147 @@ class _BannerAdWidgetState extends State<BannerAdWidget>
   @override
   bool get wantKeepAlive => true;
 
+  /// Initialize service instances
+  void _initializeServices() {
+    // Check if SDK is initialized before accessing services
+    if (!AdPlatformSDK.instance.isInitialized) {
+      debugPrint('[BannerAd] ⚠️ SDK not initialized. Please call AdPlatformSDK.instance.initialize() first.');
+      setState(() {
+        _errorMessage = 'SDK not initialized';
+        _isLoading = false;
+      });
+      return;
+    }
+    
+    // Use provided services or fall back to SDK instance services
+    _apiService = widget.apiService ?? AdPlatformSDK.instance.apiService;
+    _cacheService = widget.cacheService ?? AdPlatformSDK.instance.cacheService;
+    _trackingService = widget.trackingService ?? AdPlatformSDK.instance.trackingService;
+  }
+
   void _scheduleRefresh() {
     _refreshTimer = Timer.periodic(widget.refreshInterval, (_) {
-      if (mounted) _loadAd();
+      if (mounted) {
+        debugPrint('[BannerAd] 🔄 Auto-refresh triggered for: ${widget.placementId}');
+        _loadAd();
+      }
     });
   }
 
+  /// Enhanced ad loading with cache-first strategy
   Future<void> _loadAd() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _impressionTracked = false;
     });
+
     try {
+      debugPrint('[BannerAd] 📡 Loading ad for placement: ${widget.placementId}');
+      
+      // Step 1: Try loading from cache first
+      final cachedResponse = await _cacheService.getCachedAdResponse(widget.placementId);
+      
+      if (cachedResponse != null && cachedResponse.success && cachedResponse.ad != null) {
+        debugPrint('[BannerAd] 💾 Loaded ad from cache');
+        
+        if (!mounted) return;
+        
+        setState(() {
+          _adResponse = cachedResponse;
+          _isLoading = false;
+        });
+        
+        // Track impression
+        _trackImpression();
+        
+        widget.onAdLoaded?.call();
+        return;
+      }
+
+      // Step 2: Cache miss - fetch from API
+      debugPrint('[BannerAd] 🌐 Cache miss - fetching from API');
+      
       final request = AdRequest(
         placementId: widget.placementId,
         size: widget.size,
         adFormat: AdFormat.banner,
         targeting: widget.targeting,
       );
-      final response = await AdPlatformSDK.instance.loadBannerAd(request);
+
+      // Fetch ad from API service
+      final response = await _apiService.requestAd(request);
 
       if (!mounted) return;
-      if (response != null && response.success && response.ad != null) {
+
+      if (response.success && response.ad != null) {
+        // Step 3: Cache the successful response
+        await _cacheService.cacheAdResponse(widget.placementId, response);
+        
         setState(() {
           _adResponse = response;
           _isLoading = false;
         });
-        AdPlatformSDK.instance.trackImpression(response.ad!.id, AdFormat.banner);
+
+        // Step 4: Track ad request and impression
+        await _trackingService.trackAdRequest(request, response);
+        _trackImpression();
+
+        debugPrint('[BannerAd] ✅ Ad loaded successfully: ${response.ad!.id}');
         widget.onAdLoaded?.call();
       } else {
-        throw Exception(response?.message ?? 'No ad available');
+        throw Exception(response.message ?? 'No ad available');
       }
     } catch (e) {
+      debugPrint('[BannerAd] ❌ Ad load failed: $e');
+      
       if (!mounted) return;
+      
       setState(() {
         _isLoading = false;
         _errorMessage = e.toString();
       });
+      
       widget.onAdFailed?.call(e.toString());
     }
   }
 
+  /// Track impression (only once per ad load)
+  void _trackImpression() {
+    if (_impressionTracked || _adResponse?.ad == null) return;
+    
+    _impressionTracked = true;
+    _trackingService.trackAdImpression(
+      _adResponse!.ad!.id,
+      AdFormat.banner,
+    );
+    debugPrint('[BannerAd] 👁️ Impression tracked: ${_adResponse!.ad!.id}');
+  }
+
+  /// Enhanced click handler with tracking
   Future<void> _handleClick() async {
     final url = _adResponse?.ad?.clickUrl;
-    if (url != null) {
-      AdPlatformSDK.instance.trackClick(_adResponse!.ad!.id, AdFormat.banner);
+    final adId = _adResponse?.ad?.id;
+    
+    if (url == null || adId == null) return;
+
+    try {
+      // Track click event
+      await _trackingService.trackAdClick(adId, AdFormat.banner);
+      debugPrint('[BannerAd] 🖱️ Click tracked: $adId');
+      
       widget.onAdClicked?.call();
-      if (await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+
+      // Launch URL
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        debugPrint('[BannerAd] 🚀 Launched URL: $url');
+      } else {
+        debugPrint('[BannerAd] ⚠️ Cannot launch URL: $url');
       }
+    } catch (e) {
+      debugPrint('[BannerAd] ❌ Click handling error: $e');
     }
   }
 
@@ -455,7 +567,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget>
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(
                 color: widget.labelBackgroundColor,
-                // borderRadius: BorderRadius.circular(4),
               ),
               child: Text('Ad', style: widget.labelTextStyle),
             ),
